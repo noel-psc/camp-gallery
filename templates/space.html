@@ -1,0 +1,55 @@
+{% extends 'base.html' %}
+{% block title %}SWEET少年的创想空间{% endblock %}
+{% block content %}
+<div class="space-head">
+  <div>
+    <div class="eyebrow">MY CREATIVE SPACE ✦ {{ child.class_name }}</div>
+    <h1>SWEET少年<br>的创想空间<span class="spark">✳</span></h1>
+    <p>{{ child.class_name }} · {{ child.name }}{% if child.student_number %} · 学号 {{ child.student_number }}{% endif %}</p>
+  </div>
+  <div class="sticker">想象力<br>无限大！</div>
+</div>
+<div class="notice">{% if editable %}✦ 作品可上传和修改至 {{ deadline }}（北京时间）{% else %}✦ 上传时间已结束，作品可以继续查看{% endif %}</div>
+{% if editing %}
+<section class="upload">
+  <div>
+    <h2>{{ '添加新作品' if works else '上传你的第一件作品' }} <span>↗</span></h2>
+    <p>这是 {{ child.name }} 的专属空间。选择图片或视频，把你的创意放进来。</p>
+    {% if works %}<a class="button" href="{{ url_for('space', token=child.token) }}">完成编辑，查看作品</a>{% endif %}
+  </div>
+  <form id="upload-form" method="post" enctype="multipart/form-data" action="{{ url_for('space', token=child.token) }}" data-max-upload-mb="{{ config.MAX_CONTENT_LENGTH // 1024 // 1024 }}">
+    {% if not child.student_number %}<label>学号<input name="student_number" required maxlength="32" pattern="[A-Za-z0-9-]{1,32}" placeholder="此空间尚未登记学号，请补充一次"></label>{% endif %}
+    <label>作品名称（选填）<input name="title" maxlength="100" placeholder="给作品起个名字"></label>
+    <label>选择作品<input required type="file" name="files" multiple accept="image/jpeg,image/png,image/gif,image/webp,video/mp4,video/webm,video/quicktime"></label>
+    <button type="submit">上传作品 ↑</button>
+    <div id="upload-feedback" class="upload-feedback" hidden>
+      <div class="upload-summary"><span id="upload-status" role="status">准备上传</span><span id="upload-percent">0%</span></div>
+      <progress id="upload-progress" max="100" value="0" aria-label="作品上传进度"></progress>
+      <p id="upload-details"></p>
+    </div>
+  </form>
+</section>
+<script src="{{ url_for('static', filename='upload.js') }}" defer></script>
+{% endif %}
+<div class="section-title">
+  <div><div class="eyebrow">YOUR GALLERY</div><h2>我的作品 <small>{{ works|length }}</small></h2></div>
+  {% if editable and works and not editing %}<a class="button" href="{{ url_for('space', token=child.token, edit='1') }}">编辑作品</a>{% else %}<span>✧ 每一份创意都很珍贵</span>{% endif %}
+</div>
+<div class="gallery">
+  {% for work in works %}
+  <article class="work">
+    {% set ext = work.filename.rsplit('.', 1)[-1] %}
+    {% if ext in ['mp4','webm','mov'] %}<video controls preload="metadata" src="{{ url_for('media', token=child.token, work_id=work.id) }}"></video>
+    {% else %}<a href="{{ url_for('media', token=child.token, work_id=work.id) }}" target="_blank" rel="noopener"><img src="{{ url_for('media', token=child.token, work_id=work.id) }}" alt="{{ work.title }}"></a>{% endif %}
+    <div class="work-body">
+      {% if editing %}
+      <form method="post" action="{{ url_for('edit_work', token=child.token, work_id=work.id) }}">
+        <label>作品名称<input name="title" value="{{ work.title }}" maxlength="100" required></label>
+        <div class="actions"><button class="plain" name="action" value="save">保存名称</button><button class="plain danger" name="action" value="delete" onclick="return confirm('确定删除这件作品吗？')">删除</button></div>
+      </form>
+      {% else %}<strong>{{ work.title }}</strong>{% endif %}
+    </div>
+  </article>
+  {% else %}<div class="empty">✿<p>{{ '你的作品将在这里出现' if editable else '还没有上传作品' }}</p></div>{% endfor %}
+</div>
+{% endblock %}

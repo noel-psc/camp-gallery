@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>{{ '专属二维码标签' if labels else '专属贺卡' }}</title><link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}"></head>
+<body class="cards-page{% if labels %} labels-page{% endif %}">
+<div class="print-bar"><button onclick="window.print()">{{ '打印专属二维码' if labels else '打印贺卡' }}</button><p>二维码标签与贺卡使用同一二维码。首次扫码上传，上传后扫码查看，点击“编辑作品”可继续添加、修改名称或删除作品。打印前请用手机试扫；请将二维码发给对应学生并妥善保管。</p></div>
+<div class="cards">
+{% for child in children %}
+<article class="card">
+  <div class="eyebrow">✳ 心纹研学营{% if not labels %} · CREATIVE CAMP{% endif %}</div>
+  <div class="card-content">
+    <div>
+      {% if not labels %}<p>给小小创想家</p>{% endif %}
+      <h2>{{ child.name }}</h2><p>{{ child.class_name }}</p><p>学号：{{ child.student_number or '待补充' }}</p>
+      {% if not labels %}<strong>你的想象<br>正在发光 ✨</strong>{% endif %}
+      <p>首次扫码上传 · 再次扫码查看</p>
+    </div>
+    <img src="{{ url_for('qr', token=child.token) }}" alt="{{ child.name }}的二维码">
+  </div>
+  {% if not labels %}<div class="card-foot">KEEP CREATING, KEEP DREAMING ✦</div>{% endif %}
+</article>
+{% endfor %}
+</div>
+</body></html>

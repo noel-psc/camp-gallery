@@ -1,0 +1,16 @@
+services:
+  camp:
+    image: ${IMAGE:-camp-gallery:latest}
+    restart: unless-stopped
+    ports:
+      - "${PORT:-8000}:8000"
+    environment:
+      SECRET_KEY: ${SECRET_KEY:?请设置 SECRET_KEY}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?请设置 ADMIN_PASSWORD}
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:?请设置 PUBLIC_BASE_URL}
+      UPLOAD_DEADLINE: ${UPLOAD_DEADLINE:-2026-11-19T23:59:59+08:00}
+      MAX_UPLOAD_MB: ${MAX_UPLOAD_MB:-200}
+    volumes:
+      - camp-data:/data
+volumes:
+  camp-data:

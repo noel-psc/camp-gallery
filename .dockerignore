@@ -1,0 +1,12 @@
+.git
+.env
+.venv
+data
+__pycache__
+.pytest_cache
+static/demo-qr.png
+.agents
+.aws
+.codex
+.spec-workflow
+tests
