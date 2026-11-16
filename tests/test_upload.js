@@ -34,12 +34,14 @@ function setup({ valid = true, sendError = false, available = true } = {}) {
   const button = new Element('上传作品 ↑');
   const file = new Element();
   const title = new Element();
+  const article = new Element();
+  article.value = '';
   const requestInput = new Element();
   requestInput.value = 'initial-request-id';
   const preDisabled = new Element();
   preDisabled.disabled = true;
   file.files = [{name: 'chosen-photo.png', size: 1024}, {name: 'chosen-video.mp4', size: 2048}];
-  const controls = [requestInput, file, title, preDisabled, button];
+  const controls = [requestInput, file, title, article, preDisabled, button];
   const requests = [];
   const navigation = [];
   form.action = 'http://localhost/s/first';
@@ -66,8 +68,9 @@ function setup({ valid = true, sendError = false, available = true } = {}) {
       assert.equal(requestInput.disabled, false);
       this.id = requestInput.value;
       this.files = [...file.files];
+      this.article = article.value;
     }
-    get(name) { if (name === 'request_id') return this.id; }
+    get(name) { if (name === 'request_id') return this.id; if (name === 'article') return this.article; }
   }
   let nextID = 0;
   const window = {
@@ -92,7 +95,7 @@ function setup({ valid = true, sendError = false, available = true } = {}) {
     form.emit('submit', { preventDefault: () => { prevented = true; } });
     return prevented;
   }
-  return { elements, form, button, file, title, preDisabled, requestInput, requests, navigation, submit };
+  return { elements, form, button, file, title, article, preDisabled, requestInput, requests, navigation, submit };
 }
 
 test('real byte progress, duplicate prevention, saving state and confirmed success', () => {
@@ -231,5 +234,33 @@ test('excessive file size and count stop before sending the request', () => {
     assert.equal(ui.requests[0].data, undefined);
     assert.equal(ui.button.disabled, false);
     assert.match(ui.elements['upload-details'].textContent, /每次最多 100 个文件/);
+  }
+});
+
+
+test('pasted article submits without files and survives a failed request', () => {
+  const ui = setup();
+  ui.file.files = [];
+  ui.article.value = '今天的研学文章\n新的段落';
+  ui.submit();
+  assert.equal(ui.requests[0].data.article, ui.article.value);
+  assert.equal(ui.article.disabled, true);
+  ui.requests[0].emit('error');
+  assert.equal(ui.article.disabled, false);
+  assert.equal(ui.article.value, '今天的研学文章\n新的段落');
+  ui.form.emit('input');
+  assert.equal(ui.requestInput.value, 'new-request-1');
+});
+
+test('empty submissions and oversized pasted articles do not send', () => {
+  for (const text of ['', '   ', '字'.repeat(20001)]) {
+    const ui = setup();
+    ui.file.files = [];
+    ui.article.value = text;
+    ui.submit();
+    assert.equal(ui.requests[0].data, undefined);
+    assert.equal(ui.button.disabled, false);
+    assert.equal(ui.article.value, text);
+    assert.equal(ui.elements['upload-feedback'].dataset.state, 'error');
   }
 });

@@ -37,6 +37,11 @@ func (a *App) space(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	canEdit := activity.Editable(a.now())
+	for i := range works {
+		if works[i].IsArticle() {
+			works[i].ArticleText = a.articleText(works[i])
+		}
+	}
 	editing := canEdit && (len(works) == 0 || r.URL.Query().Get("edit") == "1")
 	a.render(w, r, "space", Page{Student: child, Activity: activity, Works: works, Editable: canEdit, Editing: editing, RequestID: randomID()}, 200)
 }
@@ -81,6 +86,10 @@ func (a *App) media(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", contentType)
 	w.Header().Set("Content-Disposition", mime.FormatMediaType("inline", map[string]string{"filename": work.OriginalName}))
+	if work.IsDocument() {
+		w.Header().Set("Content-Type", "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
+		w.Header().Set("Content-Disposition", mime.FormatMediaType("attachment", map[string]string{"filename": work.OriginalName}))
+	}
 	w.Header().Set("Cache-Control", "private, max-age=3600")
 	http.ServeContent(pacedWriter{ResponseWriter: w, ctx: r.Context(), budget: a.downloadBudget}, r, work.OriginalName, info.ModTime(), file)
 }

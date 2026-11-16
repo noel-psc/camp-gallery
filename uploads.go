@@ -16,6 +16,7 @@ import (
 	"strings"
 	"syscall"
 	"time"
+	"unicode/utf8"
 )
 
 func extension(name string) string { return strings.ToLower(filepath.Ext(name)) }
@@ -64,7 +65,7 @@ func (a *App) cleanStaging() {
 		var names []string
 		if data, err := os.ReadFile(filepath.Join(folder, "manifest.json")); err == nil && json.Unmarshal(data, &names) == nil {
 			for _, name := range names {
-				if filepath.Base(name) != name || len(strings.TrimSuffix(name, extension(name))) != 48 || !allowedExtension(extension(name)) {
+				if filepath.Base(name) != name || len(strings.TrimSuffix(name, extension(name))) != 48 || (!allowedExtension(extension(name)) && extension(name) != ".txt") {
 					continue
 				}
 				var count int
@@ -113,12 +114,14 @@ func acceptedHeader(ext string, header []byte) bool {
 		}
 	case ".webm":
 		return len(header) > 4 && bytes.Equal(header[:4], []byte{0x1a, 0x45, 0xdf, 0xa3}) && bytes.Contains(header, []byte("webm"))
+	case ".docx":
+		return len(header) >= 4 && bytes.Equal(header[:4], []byte{'P', 'K', 3, 4})
 	}
 	return false
 }
 func allowedExtension(ext string) bool {
 	switch ext {
-	case ".jpg", ".jpeg", ".png", ".gif", ".webp", ".mp4", ".mov", ".webm":
+	case ".jpg", ".jpeg", ".png", ".gif", ".webp", ".mp4", ".mov", ".webm", ".docx":
 		return true
 	}
 	return false
@@ -175,7 +178,7 @@ func (a *App) upload(w http.ResponseWriter, r *http.Request) {
 	}{pacedReader{ctx: ctx, reader: r.Body, budget: a.uploadBudget}, r.Body}
 	reader, err := r.MultipartReader()
 	if err != nil {
-		a.fail(w, r, 400, "请选择图片或视频后上传")
+		a.fail(w, r, 400, "请选择作品或粘贴文章后上传")
 		return
 	}
 	stage, err := os.MkdirTemp(filepath.Join(a.cfg.DataDir, "uploads", ".staging"), "upload-")
@@ -212,13 +215,17 @@ func (a *App) upload(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if part.FileName() == "" {
-			value, err := io.ReadAll(io.LimitReader(part, 8193))
+			limit := int64(8192)
+			if part.FormName() == "article" {
+				limit = maxArticleBytes
+			}
+			value, err := io.ReadAll(io.LimitReader(part, limit+1))
 			if err != nil {
 				failRead(err)
 				return
 			}
 			totalFields += int64(len(value))
-			if len(value) > 8192 || totalFields > 32768 {
+			if int64(len(value)) > limit || totalFields > maxArticleBytes+32768 {
 				a.fail(w, r, 400, "表单文字过长")
 				return
 			}
@@ -240,7 +247,7 @@ func (a *App) upload(w http.ResponseWriter, r *http.Request) {
 		ext := extension(name)
 		if !allowedExtension(ext) {
 			part.Close()
-			a.fail(w, r, 400, "只支持 JPG、PNG、GIF、WebP 图片和 MP4、MOV、WebM 视频")
+			a.fail(w, r, 400, "支持 JPG、PNG、GIF、WebP 图片、MP4、MOV、WebM 视频和 DOCX 文章")
 			return
 		}
 		filename := randomID() + ext
@@ -262,7 +269,7 @@ func (a *App) upload(w http.ResponseWriter, r *http.Request) {
 		if n == 0 || !acceptedHeader(ext, header[:n]) {
 			file.Close()
 			part.Close()
-			a.fail(w, r, 400, "文件内容与格式不匹配，请选择原始图片或视频")
+			a.fail(w, r, 400, "文件内容与格式不匹配，请选择原始图片、视频或 DOCX 文档")
 			return
 		}
 		first.Write(header[:n])
@@ -284,11 +291,30 @@ func (a *App) upload(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		part.Close()
+		if ext == ".docx" {
+			if err := validateDOCX(path); err != nil {
+				a.fail(w, r, 400, err.Error())
+				return
+			}
+		}
 		works = append(works, stagedWork{Work: Work{StudentID: child.ID, Filename: filename, OriginalName: name}, Path: path, Hash: hex.EncodeToString(hash.Sum(nil))})
 	}
 	if !a.validCSRF(r, fields["csrf"]) {
 		a.fail(w, r, 403, "页面已过期，请刷新后重试")
 		return
+	}
+	title := truncate(fields["title"], 100)
+	if text := strings.TrimSpace(fields["article"]); text != "" {
+		if !utf8.ValidString(text) || utf8.RuneCountInString(text) > maxArticleChars {
+			a.fail(w, r, 400, "文章正文最多 20000 字，请精简后提交或上传 .docx")
+			return
+		}
+		article, err := stageArticle(stage, text, title, child.ID)
+		if err != nil {
+			a.internal(w, r, err)
+			return
+		}
+		works = append(works, article)
 	}
 	if len(works) == 0 {
 		a.fail(w, r, 400, "请至少选择一件作品")
@@ -319,7 +345,6 @@ func (a *App) upload(w http.ResponseWriter, r *http.Request) {
 		a.fail(w, r, 400, "学生姓名与此空间不一致")
 		return
 	}
-	title := truncate(fields["title"], 100)
 	fingerprint := sha256.New()
 	fmt.Fprintf(fingerprint, "%q\x00%q", number, title)
 	for i := range works {

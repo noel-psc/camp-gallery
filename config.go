@@ -13,7 +13,7 @@ import (
 	_ "time/tzdata"
 )
 
-const version = "2.0.0-go"
+const version = "2.1.0-go"
 
 var shanghai = time.FixedZone("CST", 8*60*60)
 

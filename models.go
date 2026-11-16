@@ -40,7 +40,11 @@ type Student struct {
 type Work struct {
 	ID, StudentID                            int64
 	Filename, OriginalName, Title, CreatedAt string
+	ArticleText                              string
 }
+
+func (w Work) IsArticle() bool  { return extension(w.Filename) == ".txt" }
+func (w Work) IsDocument() bool { return extension(w.Filename) == ".docx" }
 
 func (w Work) IsVideo() bool {
 	switch extension(w.Filename) {

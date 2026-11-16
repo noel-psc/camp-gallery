@@ -12,7 +12,7 @@
   const button = form.querySelector('button[type="submit"]');
   const fileInput = form.querySelector('input[type="file"]');
   const requestInput = form.querySelector('input[name="request_id"]');
-  const controls = Array.from(form.querySelectorAll('input, button'));
+  const controls = Array.from(form.querySelectorAll('input, textarea, button'));
   const buttonText = button.textContent;
   let busy = false;
 
@@ -62,6 +62,7 @@
     event.preventDefault();
     if (busy || !form.reportValidity()) return;
     const data = new FormData(form);
+    const article = String(data.get('article') || '').trim();
     const disabled = controls.map((control) => control.disabled);
     const xhr = new XMLHttpRequest();
     function fail(message) {
@@ -78,6 +79,14 @@
       feedback.scrollIntoView?.({ block: 'nearest' });
     }
     const files = Array.from(fileInput.files || []);
+    if (!files.length && !article) {
+      fail('请选择作品文件或粘贴文章正文。');
+      return;
+    }
+    if (Array.from(article).length > 20000) {
+      fail('文章正文最多 20000 字，请精简后提交或上传 DOCX。');
+      return;
+    }
     if (files.length > 100 || files.reduce((sum, file) => sum + file.size, 0) > Number(form.dataset.maxUploadMb) * 1024 * 1024) {
       fail(`请分批上传：每次最多 100 个文件，合计不超过 ${form.dataset.maxUploadMb} MB。`);
       return;
