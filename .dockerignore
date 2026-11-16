@@ -10,3 +10,8 @@ static/demo-qr.png
 .codex
 .spec-workflow
 tests
+docs
+camp
+camp-gallery
+*.test
+coverage.out

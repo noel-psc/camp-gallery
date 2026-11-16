@@ -2,6 +2,16 @@ services:
   camp:
     image: ${IMAGE:-camp-gallery:latest}
     restart: unless-stopped
+    stop_grace_period: 35s
+    init: true
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    mem_limit: 768m
+    cpus: "1.5"
+    pids_limit: 128
     ports:
       - "${PORT:-8000}:8000"
     environment:
@@ -10,6 +20,14 @@ services:
       PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:?请设置 PUBLIC_BASE_URL}
       UPLOAD_DEADLINE: ${UPLOAD_DEADLINE:-2026-11-19T23:59:59+08:00}
       MAX_UPLOAD_MB: ${MAX_UPLOAD_MB:-200}
+      ACTIVITY_TITLE: ${ACTIVITY_TITLE:-心纹研学营}
+      MAX_CONCURRENT_UPLOADS: ${MAX_CONCURRENT_UPLOADS:-8}
+      MAX_QUEUED_UPLOADS: ${MAX_QUEUED_UPLOADS:-128}
+      MIN_FREE_DISK_MB: ${MIN_FREE_DISK_MB:-512}
+      UPLOAD_TIMEOUT_SECONDS: ${UPLOAD_TIMEOUT_SECONDS:-7200}
+      UPLOAD_BANDWIDTH_MBPS: ${UPLOAD_BANDWIDTH_MBPS:-90}
+      DOWNLOAD_BANDWIDTH_MBPS: ${DOWNLOAD_BANDWIDTH_MBPS:-80}
+      GOMEMLIMIT: ${GOMEMLIMIT:-512MiB}
     volumes:
       - camp-data:/data
 volumes:

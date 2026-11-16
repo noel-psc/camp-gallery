@@ -4,3 +4,7 @@ __pycache__/
 *.py[cod]
 data/
 .pytest_cache/
+/camp
+/camp-gallery
+*.test
+coverage.out

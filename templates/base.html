@@ -1,1 +1,19 @@
-<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>{% block title %}SWEET少年的创想空间{% endblock %}</title><link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}"></head><body><header><a class="brand" href="/">✳ 心纹研学营 <span>CREATIVE CAMP</span></a></header><main>{% block content %}{% endblock %}</main><footer>把想象留下来，让创造继续发光 ✨</footer></body></html>
+{{define "base.html"}}<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light"><title>{{.Title}}</title>
+  <link rel="stylesheet" href="{{asset "style.css"}}"><script src="{{asset "app.js"}}" defer></script>
+</head>
+<body>
+<header class="site-header"><div class="header-inner">
+  <a class="brand" href="/"><span class="brand-mark" aria-hidden="true">✳</span><span>SWEET少年<small>创想空间 · CREATIVE SPACE</small></span></a>
+  <nav aria-label="主导航">{{if .IsAdmin}}<a href="/admin" {{if eq .ActiveNav "students"}}aria-current="page"{{end}}>学生与作品</a><a href="/admin/activities" {{if eq .ActiveNav "activities"}}aria-current="page"{{end}}>活动管理</a><form method="post" action="/admin/logout"><input type="hidden" name="csrf" value="{{.CSRF}}"><button class="text-button">退出</button></form>{{else}}<a class="nav-secondary" href="/admin/login">管理入口 <span aria-hidden="true">↗</span></a>{{end}}</nav>
+</div></header>
+<main class="page {{if .ActiveNav}}admin-page{{end}}">
+  {{if .Notice}}<div class="flash flash-success" role="status">{{.Notice}}</div>{{end}}
+  {{if .Error}}<div class="flash flash-error" role="alert">{{.Error}}</div>{{end}}
+  {{template "content" .}}
+</main>
+<footer class="site-footer"><span class="footer-star" aria-hidden="true">✳</span> 把创意留住，让成长被看见 <span class="footer-note">SWEET CREATIVE SPACE</span></footer>
+</body></html>{{end}}
