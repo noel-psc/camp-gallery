@@ -1,0 +1,21 @@
+{{define "content"}}
+<section class="panel login-panel">
+<h1>修改学生信息</h1>
+<p>{{.Activity.Title}} · 修改信息后，原二维码和作品保持不变。</p>
+<form method="post">
+<input type="hidden" name="csrf" value="{{.CSRF}}">
+<label for="student-class">班级</label><input id="student-class" name="class_name" value="{{.Student.ClassName}}" maxlength="80" required>
+<label for="student-number">学号</label><input id="student-number" name="student_number" value="{{.Student.StudentNumber}}" maxlength="32" pattern="[A-Za-z0-9-]{1,32}" required>
+<label for="student-name">姓名</label><input id="student-name" name="name" value="{{.Student.Name}}" maxlength="80" required>
+<button class="button" name="action" value="save">保存信息</button>
+<a class="text-link" href="{{activityURL "/admin" .Activity.ID}}">返回名单</a>
+</form>
+<hr>
+<h2>删除学生</h2><p>删除该学生及全部作品，原二维码立即失效。此操作无法撤销，请先按需导出作品。</p>
+<form method="post">
+<input type="hidden" name="csrf" value="{{.CSRF}}">
+<label><input type="checkbox" name="confirm_delete" value="yes" required> 我确认删除该学生及全部作品</label>
+<button class="text-button danger" name="action" value="delete" data-confirm="确定删除该学生及全部作品？原二维码将失效，此操作无法撤销。">删除学生及作品</button>
+</form>
+</section>
+{{end}}

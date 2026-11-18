@@ -92,7 +92,7 @@ func NewApp(c Config, logger *slog.Logger) (*App, error) {
 	}
 	// Each page owns its content definition while sharing the same shell.
 	funcs["isOpen"] = func(activity Activity) bool { return activity.Editable(a.now()) }
-	for _, name := range []string{"home", "space", "admin", "activities", "login", "error"} {
+	for _, name := range []string{"home", "space", "admin", "activities", "student", "login", "error"} {
 		t, err := template.New("base.html").Funcs(funcs).ParseFS(assets, "templates/base.html", "templates/"+name+".html")
 		if err != nil {
 			a.Close()
@@ -126,6 +126,8 @@ func NewApp(c Config, logger *slog.Logger) (*App, error) {
 	a.mux.HandleFunc("GET /admin/activities", a.adminOnly(a.activities))
 	a.mux.HandleFunc("POST /admin/activities", a.adminOnly(a.activities))
 	a.mux.HandleFunc("POST /admin/activities/{id}", a.adminOnly(a.updateActivity))
+	a.mux.HandleFunc("GET /admin/students/{token}", a.adminOnly(a.manageStudent))
+	a.mux.HandleFunc("POST /admin/students/{token}", a.adminOnly(a.manageStudent))
 	a.mux.HandleFunc("GET /admin/cards", a.adminOnly(a.cards))
 	a.mux.HandleFunc("GET /admin/qr/{token}", a.adminOnly(a.qr))
 	a.mux.HandleFunc("GET /admin/export", a.adminOnly(a.exportWorks))
