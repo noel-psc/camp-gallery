@@ -8,3 +8,10 @@ data/
 /camp-gallery
 *.test
 coverage.out
+
+# Deployment backups and recovery state
+backups/
+.camp-update.lock
+.camp-env-*
+.camp-recovery-*
+compose.camp-recovery.json

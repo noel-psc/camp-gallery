@@ -54,6 +54,41 @@ docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
 
 当前地址通过 HTTP 的 8000 端口访问，需要云安全组及系统防火墙放通 TCP 8000。生产环境可在前面配置 HTTPS 反向代理；代理请求大小、读写超时也要允许视频上传。
 
+## 一条命令发布与更新
+
+在笔记本项目目录运行：
+
+```bash
+./deploy/release.sh
+```
+
+脚本从当前源码重新构建镜像，发布到现有阿里云 `noel-dev/camp-gallery` 仓库，同时推送时间戳版本与 `latest`。需要本机已有有效的容器仓库登录。也可指定版本：`./deploy/release.sh v2.1.0-go`。
+
+首次将服务器更新脚本复制过去，在笔记本执行（服务器账号按实际填写）：
+
+```bash
+ssh ecs-user@139.196.79.195 'sudo tee /opt/camp-gallery/update.sh >/dev/null' < deploy/update.sh
+```
+
+之后每次发布成功，在服务器原部署目录执行：
+
+```bash
+cd /opt/camp-gallery
+sudo bash ./update.sh
+```
+
+可指定某次已发布版本：`sudo bash ./update.sh v2.1.0-go`。服务器需安装 Docker Compose、Python 3 和 `flock`，并通过 `sudo docker login` 登录仓库。脚本先拉取镜像，成功后暂停服务、完整备份 `/data`，再更新容器并等待健康检查。密码、密钥、网站地址和持久化数据沿用原部署配置。默认健康检查最多等待 120 秒，可通过 `UPDATE_TIMEOUT_SECONDS` 调整。
+
+备份位于部署目录 `backups/update-时间戳/`，包含数据库、作品、原配置和容器信息。备份失败会尝试重启原容器；更新失败会把备份恢复到新数据卷并启动旧镜像，同时保留失败版本的数据卷供核对。恢复配置通过 `.env` 的 `COMPOSE_FILE` 持续生效。备份可能包含密码和私人作品，请妥善保存；完整备份会占用额外磁盘空间，脚本不会自动删除备份或数据卷。
+
+如果笔记本已能 SSH 登录服务器，且服务器账号有免密 sudo Docker 和写入更新脚本的权限，也可以一次完成发布和更新：
+
+```bash
+./deploy/release.sh --deploy ecs-user@139.196.79.195
+```
+
+此命令先验证 SSH 和权限，再构建推送、复制更新脚本并触发服务器更新。更新时会有备份和启动所需的维护窗口，建议在无学生上传时执行。本地脚本已通过模拟 Docker/SSH 的成功、失败恢复及并发锁测试；真实部署结果以服务器健康检查为准。
+
 ## 配置
 
 | 变量 | 默认值 / 作用 |
