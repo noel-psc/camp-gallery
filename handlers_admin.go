@@ -118,7 +118,7 @@ func (a *App) activities(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		title := strings.TrimSpace(r.FormValue("title"))
-		deadline, parseErr := time.ParseInLocation("2006-01-02T15:04", r.FormValue("deadline"), shanghai)
+		deadline, parseErr := parseDeadlineInput(r.FormValue("deadline"))
 		if title == "" || len([]rune(title)) > 80 || parseErr != nil {
 			page.Error = "请填写活动名称和有效的北京时间截止日期"
 		} else {
@@ -158,7 +158,7 @@ func (a *App) updateActivity(w http.ResponseWriter, r *http.Request) {
 		_, err = a.db.ExecContext(r.Context(), "UPDATE activities SET archived=0 WHERE id=?", id)
 	case "save":
 		title := strings.TrimSpace(r.FormValue("title"))
-		deadline, parseErr := time.ParseInLocation("2006-01-02T15:04", r.FormValue("deadline"), shanghai)
+		deadline, parseErr := parseDeadlineInput(r.FormValue("deadline"))
 		if title == "" || len([]rune(title)) > 80 || parseErr != nil {
 			a.fail(w, r, 400, "请填写活动名称和有效的北京时间截止日期")
 			return
@@ -202,4 +202,13 @@ func (a *App) qr(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "image/png")
 	_, _ = w.Write(png)
+}
+
+// Older minute-only forms mean the end of the selected minute.
+func parseDeadlineInput(value string) (time.Time, error) {
+	if len(value) == 16 {
+		t, err := time.ParseInLocation("2006-01-02T15:04", value, shanghai)
+		return t.Add(59 * time.Second), err
+	}
+	return time.ParseInLocation("2006-01-02T15:04:05", value, shanghai)
 }

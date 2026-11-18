@@ -22,7 +22,7 @@ func (a Activity) DeadlineLabel() string {
 }
 func (a Activity) DeadlineInput() string {
 	deadline, _ := time.Parse(time.RFC3339, a.Deadline)
-	return deadline.In(shanghai).Format("2006-01-02T15:04")
+	return deadline.In(shanghai).Format("2006-01-02T15:04:05")
 }
 func (a Activity) Completion() int {
 	if a.Students == 0 {

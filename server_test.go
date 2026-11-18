@@ -298,7 +298,7 @@ func TestUploadIdempotencyAndEditing(t *testing.T) {
 	works, _ := listWorks(context.Background(), s.app.db, 1)
 	idPath := fmt.Sprintf("/s/token-0/work/%d", works[0].ID)
 	s.post(t, fmt.Sprintf("/s/token-1/work/%d", works[0].ID), url.Values{"action": {"delete"}}, 404)
-	s.post(t, idPath, url.Values{"action": {"save"}, "title": {"新名称"}}, 303)
+	s.post(t, idPath, url.Values{"action": {"save"}, "title": {"新名称"}, "work_version": {works[0].Filename}}, 303)
 	s.get(t, "/s/token-0", 200)
 	request, _ := http.NewRequest("GET", s.server.URL+fmt.Sprintf("/s/token-0/file/%d", works[0].ID), nil)
 	request.Header.Set("Range", "bytes=0-7")
@@ -311,7 +311,7 @@ func TestUploadIdempotencyAndEditing(t *testing.T) {
 	if response.StatusCode != 206 || !bytes.Equal(data, tinyPNG[:8]) {
 		t.Fatal("video/image range requests unsupported")
 	}
-	s.post(t, idPath, url.Values{"action": {"delete"}}, 303)
+	s.post(t, idPath, url.Values{"action": {"delete"}, "work_version": {works[0].Filename}}, 303)
 	if s.workCount(t) != 0 {
 		t.Fatal("delete failed")
 	}

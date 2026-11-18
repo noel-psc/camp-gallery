@@ -120,35 +120,53 @@ func (a *App) editWork(w http.ResponseWriter, r *http.Request) {
 		a.fail(w, r, 404, "作品不存在")
 		return
 	}
-	var filename string
-	err = a.db.QueryRowContext(r.Context(), "SELECT filename FROM works WHERE id=? AND student_id=?", id, child.ID).Scan(&filename)
-	if errors.Is(err, sql.ErrNoRows) {
+	var exists int
+	if err := a.db.QueryRowContext(r.Context(), "SELECT count(*) FROM works WHERE id=? AND student_id=?", id, child.ID).Scan(&exists); err != nil {
+		a.internal(w, r, err)
+		return
+	}
+	if exists == 0 {
 		a.fail(w, r, 404, "作品不存在")
+		return
+	}
+	filename := r.FormValue("work_version")
+	if filename == "" {
+		a.fail(w, r, 409, "作品页面已更新，请刷新后重试")
+		return
+	}
+	action := r.FormValue("action")
+	var result sql.Result
+	// Match both immutable file identity and current space token in the mutation.
+	predicate := " WHERE id=? AND student_id=? AND filename=? AND EXISTS (SELECT 1 FROM students WHERE id=? AND token=?)"
+	if action == "delete" {
+		result, err = a.db.ExecContext(r.Context(), "DELETE FROM works"+predicate, id, child.ID, filename, child.ID, child.Token)
+	} else if action == "save" {
+		title := truncate(r.FormValue("title"), 100)
+		if title == "" {
+			a.fail(w, r, 400, "作品名称不能为空")
+			return
+		}
+		result, err = a.db.ExecContext(r.Context(), "UPDATE works SET title=?"+predicate, title, id, child.ID, filename, child.ID, child.Token)
+	} else {
+		a.fail(w, r, 400, "无效操作")
 		return
 	}
 	if err != nil {
 		a.internal(w, r, err)
 		return
 	}
-	if r.FormValue("action") == "delete" {
-		if _, err = a.db.ExecContext(r.Context(), "DELETE FROM works WHERE id=? AND student_id=?", id, child.ID); err != nil {
-			a.internal(w, r, err)
-			return
-		}
-		if filepath.Base(filename) == filename && !strings.HasPrefix(filename, ".") {
-			if err := a.files.Remove(filename); err != nil {
-				a.logger.Warn("deleted work file could not be removed", "work_id", id, "error", err)
-			}
-		}
-	} else {
-		title := truncate(r.FormValue("title"), 100)
-		if title == "" {
-			a.fail(w, r, 400, "作品名称不能为空")
-			return
-		}
-		if _, err = a.db.ExecContext(r.Context(), "UPDATE works SET title=? WHERE id=? AND student_id=?", title, id, child.ID); err != nil {
-			a.internal(w, r, err)
-			return
+	count, err := result.RowsAffected()
+	if err != nil {
+		a.internal(w, r, err)
+		return
+	}
+	if count == 0 {
+		a.fail(w, r, 409, "作品已删除或替换，请刷新页面")
+		return
+	}
+	if action == "delete" && filepath.Base(filename) == filename && !strings.HasPrefix(filename, ".") {
+		if err := a.files.Remove(filename); err != nil {
+			a.logger.Warn("deleted work file could not be removed", "work_id", id, "error", err)
 		}
 	}
 	http.Redirect(w, r, "/s/"+child.Token+"?edit=1&notice="+"作品已更新", 303)

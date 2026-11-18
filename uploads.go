@@ -383,6 +383,15 @@ func (a *App) commitUpload(ctx context.Context, child Student, requestID, finger
 		return err
 	}
 	defer tx.Rollback()
+	var registered string
+	var archived bool
+	err = tx.QueryRowContext(ctx, "SELECT s.student_number,a.archived FROM students s JOIN activities a ON a.id=s.activity_id WHERE s.id=? AND s.token=?", child.ID, child.Token).Scan(&registered, &archived)
+	if errors.Is(err, sql.ErrNoRows) {
+		return &uploadError{404, "学生空间已删除，请联系老师核对二维码"}
+	}
+	if err != nil {
+		return err
+	}
 	var previous string
 	err = tx.QueryRowContext(ctx, "SELECT fingerprint FROM upload_batches WHERE student_id=? AND request_id=?", child.ID, requestID).Scan(&previous)
 	if err == nil {
@@ -392,11 +401,6 @@ func (a *App) commitUpload(ctx context.Context, child Student, requestID, finger
 		return &uploadError{409, "这次上传内容已变更，请重新选择文件后提交"}
 	}
 	if !errors.Is(err, sql.ErrNoRows) {
-		return err
-	}
-	var registered string
-	var archived bool
-	if err := tx.QueryRowContext(ctx, "SELECT s.student_number,a.archived FROM students s JOIN activities a ON a.id=s.activity_id WHERE s.id=?", child.ID).Scan(&registered, &archived); err != nil {
 		return err
 	}
 	if archived {

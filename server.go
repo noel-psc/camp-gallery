@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
 	"embed"
 	"encoding/json"
@@ -66,7 +67,10 @@ func NewApp(c Config, logger *slog.Logger) (*App, error) {
 	a.uploadBudget = newByteBudget(c.UploadBytesPerSecond)
 	a.downloadBudget = newByteBudget(c.DownloadBytesPerSecond)
 	funcs := template.FuncMap{
-		"asset":    func(name string) string { return "/static/" + name + "?v=" + version },
+		"asset": func(name string) string {
+			data, _ := assets.ReadFile("static/" + name)
+			return fmt.Sprintf("/static/%s?v=%x", name, sha256.Sum256(data))
+		},
 		"spaceURL": func(s Student) string { return "/s/" + url.PathEscape(s.Token) },
 		"mediaURL": func(token string, work Work) string {
 			return fmt.Sprintf("/s/%s/file/%d?v=%s", url.PathEscape(token), work.ID, url.QueryEscape(work.Filename))

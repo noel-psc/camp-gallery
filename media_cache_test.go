@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"image"
 	"image/color"
@@ -43,7 +44,8 @@ func TestDeletedPhotoReplacementHasDistinctCacheIdentity(t *testing.T) {
 	}
 	etag := response.Header.Get("ETag")
 	response.Body.Close()
-	s.post(t, "/s/token-0/work/1", url.Values{"action": {"delete"}}, 303)
+	works, _ := listWorks(context.Background(), s.app.db, 1)
+	s.post(t, "/s/token-0/work/1", url.Values{"action": {"delete"}, "work_version": {works[0].Filename}}, 303)
 	s.upload(t, "token-0", randomID(), "照片", "photo.png", newPhoto, 200)
 	newURL := mediaPath()
 	if oldURL == newURL {
