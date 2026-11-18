@@ -65,6 +65,10 @@ func (a *App) media(w http.ResponseWriter, r *http.Request) {
 		a.internal(w, r, err)
 		return
 	}
+	if version := r.URL.Query().Get("v"); version != "" && version != work.Filename {
+		a.fail(w, r, 404, "这件作品已删除或替换")
+		return
+	}
 	if filepath.Base(work.Filename) != work.Filename || strings.HasPrefix(work.Filename, ".") {
 		a.fail(w, r, 404, "作品文件不存在")
 		return
@@ -90,7 +94,13 @@ func (a *App) media(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
 		w.Header().Set("Content-Disposition", mime.FormatMediaType("attachment", map[string]string{"filename": work.OriginalName}))
 	}
-	w.Header().Set("Cache-Control", "private, max-age=3600")
+	// SQLite can reuse a deleted work ID. Cache only URLs bound to this file.
+	w.Header().Set("ETag", `"`+work.Filename+`"`)
+	if r.URL.Query().Get("v") == work.Filename {
+		w.Header().Set("Cache-Control", "private, max-age=3600")
+	} else {
+		w.Header().Set("Cache-Control", "private, no-cache")
+	}
 	http.ServeContent(pacedWriter{ResponseWriter: w, ctx: r.Context(), budget: a.downloadBudget}, r, work.OriginalName, info.ModTime(), file)
 }
 func (a *App) editWork(w http.ResponseWriter, r *http.Request) {

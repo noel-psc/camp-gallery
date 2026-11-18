@@ -66,9 +66,11 @@ func NewApp(c Config, logger *slog.Logger) (*App, error) {
 	a.uploadBudget = newByteBudget(c.UploadBytesPerSecond)
 	a.downloadBudget = newByteBudget(c.DownloadBytesPerSecond)
 	funcs := template.FuncMap{
-		"asset":       func(name string) string { return "/static/" + name + "?v=" + version },
-		"spaceURL":    func(s Student) string { return "/s/" + url.PathEscape(s.Token) },
-		"mediaURL":    func(token string, id int64) string { return fmt.Sprintf("/s/%s/file/%d", url.PathEscape(token), id) },
+		"asset":    func(name string) string { return "/static/" + name + "?v=" + version },
+		"spaceURL": func(s Student) string { return "/s/" + url.PathEscape(s.Token) },
+		"mediaURL": func(token string, work Work) string {
+			return fmt.Sprintf("/s/%s/file/%d?v=%s", url.PathEscape(token), work.ID, url.QueryEscape(work.Filename))
+		},
 		"qrURL":       func(token string) string { return "/admin/qr/" + url.PathEscape(token) },
 		"activityURL": func(path string, id int64) string { return fmt.Sprintf("%s?activity=%d", path, id) },
 		"statusLabel": func(activity Activity) string {
