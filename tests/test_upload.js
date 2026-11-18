@@ -33,6 +33,8 @@ function setup({ valid = true, sendError = false, available = true } = {}) {
   const form = elements['upload-form'];
   const button = new Element('上传作品 ↑');
   const file = new Element();
+  const documentFile = new Element();
+  documentFile.files = [];
   const title = new Element();
   const article = new Element();
   article.value = '';
@@ -41,7 +43,7 @@ function setup({ valid = true, sendError = false, available = true } = {}) {
   const preDisabled = new Element();
   preDisabled.disabled = true;
   file.files = [{name: 'chosen-photo.png', size: 1024}, {name: 'chosen-video.mp4', size: 2048}];
-  const controls = [requestInput, file, title, article, preDisabled, button];
+  const controls = [requestInput, file, documentFile, title, article, preDisabled, button];
   const requests = [];
   const navigation = [];
   form.action = 'http://localhost/s/first';
@@ -49,7 +51,7 @@ function setup({ valid = true, sendError = false, available = true } = {}) {
   form.dataset.timeoutMs = '66000';
   form.reportValidity = () => valid;
   form.querySelector = (s) => s.includes('request_id') ? requestInput : s.includes('file') ? file : button;
-  form.querySelectorAll = () => controls;
+  form.querySelectorAll = (selector) => selector === 'input[type="file"]' ? [file, documentFile] : controls;
 
   class Request extends Element {
     constructor() { super(); this.upload = new Element(); this.headers = {}; requests.push(this); }
@@ -67,7 +69,7 @@ function setup({ valid = true, sendError = false, available = true } = {}) {
       assert.equal(title.disabled, false);
       assert.equal(requestInput.disabled, false);
       this.id = requestInput.value;
-      this.files = [...file.files];
+      this.files = [...file.files, ...documentFile.files];
       this.article = article.value;
     }
     get(name) { if (name === 'request_id') return this.id; if (name === 'article') return this.article; }
@@ -95,7 +97,7 @@ function setup({ valid = true, sendError = false, available = true } = {}) {
     form.emit('submit', { preventDefault: () => { prevented = true; } });
     return prevented;
   }
-  return { elements, form, button, file, title, article, preDisabled, requestInput, requests, navigation, submit };
+  return { elements, form, button, file, documentFile, title, article, preDisabled, requestInput, requests, navigation, submit };
 }
 
 test('real byte progress, duplicate prevention, saving state and confirmed success', () => {
@@ -263,4 +265,40 @@ test('empty submissions and oversized pasted articles do not send', () => {
     assert.equal(ui.article.value, text);
     assert.equal(ui.elements['upload-feedback'].dataset.state, 'error');
   }
+});
+
+
+test('DOCX uses a dedicated document picker without media or capture hints', () => {
+  const template = readFileSync(join(__dirname, '../templates/space.html'), 'utf8');
+  const inputs = [...template.matchAll(/<input\b[^>]*type="file"[^>]*>/g)].map((match) => match[0]);
+  const documents = inputs.find((input) => /id="work-documents"/.test(input));
+  assert.ok(documents, 'DOCX must have its own file input');
+  assert.match(documents, /name="files"/);
+  assert.match(documents, /accept="\.docx,application\/vnd\.openxmlformats-officedocument\.wordprocessingml\.document"/);
+  assert.doesNotMatch(documents, /image\/|video\/|capture/);
+  const media = inputs.find((input) => /id="work-files"/.test(input));
+  assert.doesNotMatch(media, /docx|capture/);
+});
+
+test('document-only selection is displayed, submitted and preserved after failure', () => {
+  const ui = setup();
+  ui.file.files = [];
+  ui.documentFile.files = [{name: '文章.docx', size: 4096}];
+  ui.documentFile.emit('change');
+  assert.equal(ui.requestInput.value, 'new-request-1');
+  assert.equal(ui.elements['selected-files'].children[0].children[0].textContent, '文章.docx');
+  ui.submit();
+  assert.equal(ui.requests[0].data.files[0].name, '文章.docx');
+  assert.equal(ui.documentFile.disabled, true);
+  ui.requests[0].emit('error');
+  assert.equal(ui.documentFile.disabled, false);
+  assert.equal(ui.documentFile.files[0].name, '文章.docx');
+});
+
+test('combined media and documents share the upload count and size limits', () => {
+  const ui = setup();
+  ui.documentFile.files = Array.from({length: 99}, () => ({name: '文章.docx', size: 1}));
+  ui.submit();
+  assert.equal(ui.requests[0].data, undefined);
+  assert.match(ui.elements['upload-details'].textContent, /每次最多 100 个文件/);
 });

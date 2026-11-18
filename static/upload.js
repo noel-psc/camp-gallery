@@ -10,7 +10,9 @@
   const list = document.getElementById('selected-files');
   const drop = document.getElementById('file-drop');
   const button = form.querySelector('button[type="submit"]');
-  const fileInput = form.querySelector('input[type="file"]');
+  const fileInputs = Array.from(form.querySelectorAll('input[type="file"]'));
+  const fileInput = fileInputs[0];
+  const selectedFiles = () => fileInputs.flatMap((input) => Array.from(input.files || []));
   const requestInput = form.querySelector('input[name="request_id"]');
   const controls = Array.from(form.querySelectorAll('input, textarea, button'));
   const buttonText = button.textContent;
@@ -27,7 +29,7 @@
     feedback.hidden = true;
     if (!list) return;
     list.replaceChildren();
-    const files = Array.from(fileInput.files || []);
+    const files = selectedFiles();
     list.hidden = files.length === 0;
     files.forEach((file) => {
       const item = document.createElement('li');
@@ -42,7 +44,7 @@
     });
   }
   form.addEventListener('input', changed);
-  fileInput.addEventListener('change', changed);
+  fileInputs.forEach((input) => input.addEventListener('change', changed));
   if (drop && window.DataTransfer) {
     ['dragenter', 'dragover'].forEach((type) => drop.addEventListener(type, (event) => {
       event.preventDefault();
@@ -78,7 +80,7 @@
       details.textContent = message;
       feedback.scrollIntoView?.({ block: 'nearest' });
     }
-    const files = Array.from(fileInput.files || []);
+    const files = selectedFiles();
     if (!files.length && !article) {
       fail('请选择作品文件或粘贴文章正文。');
       return;
