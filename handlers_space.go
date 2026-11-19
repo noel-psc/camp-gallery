@@ -89,11 +89,14 @@ func (a *App) media(w http.ResponseWriter, r *http.Request) {
 		contentType = "application/octet-stream"
 	}
 	w.Header().Set("Content-Type", contentType)
-	w.Header().Set("Content-Disposition", mime.FormatMediaType("inline", map[string]string{"filename": work.OriginalName}))
+	disposition := "inline"
+	if work.IsDocument() || r.URL.Query().Get("download") == "1" {
+		disposition = "attachment"
+	}
 	if work.IsDocument() {
 		w.Header().Set("Content-Type", "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
-		w.Header().Set("Content-Disposition", mime.FormatMediaType("attachment", map[string]string{"filename": work.OriginalName}))
 	}
+	w.Header().Set("Content-Disposition", mime.FormatMediaType(disposition, map[string]string{"filename": work.OriginalName}))
 	// SQLite can reuse a deleted work ID. Cache only URLs bound to this file.
 	w.Header().Set("ETag", `"`+work.Filename+`"`)
 	if r.URL.Query().Get("v") == work.Filename {
