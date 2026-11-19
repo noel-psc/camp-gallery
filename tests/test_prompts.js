@@ -45,6 +45,8 @@ test('all five buttons copy full prompts over plain HTTP without exposing prompt
     await ui.buttons[i].click();
     assert.ok(ui.copied[i].startsWith(starts[i]));
     assert.match(ui.copied[i], /要求：/);
+    assert.match(ui.copied[i], /不要生成水印/);
+    assert.match(ui.copied[i], /请去除水印后再输出最终/);
     assert.equal(ui.manual.hidden, true);
     assert.equal(ui.buttons[i].disabled, false);
     assert.match(ui.status.textContent, /已复制/);
@@ -52,6 +54,12 @@ test('all five buttons copy full prompts over plain HTTP without exposing prompt
   }
   assert.match(ui.copied[1], /　　这是故事的第一自然段。/);
   for (const style of ['画风A：黑白水墨画', '画风B：工笔重彩', '画风C：传统年画', '画风D：国风儿童插画']) assert.ok(ui.copied[3].includes(style));
+  assert.match(ui.copied[4], /有声短视频/);
+  assert.match(ui.copied[4], /背景音乐、环境音和动作音效/);
+  assert.match(ui.copied[4], /无需人物对白或旁白/);
+  assert.match(ui.copied[4], /不要生成水印/);
+  assert.match(ui.copied[4], /请去除水印后再输出最终视频/);
+  assert.match(ui.copied[4], /请直接生成带有音频的视频/);
   assert.equal(ui.removed.length, 5);
 });
 
