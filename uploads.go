@@ -143,7 +143,9 @@ func (a *App) upload(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), a.cfg.UploadTimeout)
 	defer cancel()
 	r = r.WithContext(ctx)
-	_ = http.NewResponseController(w).SetReadDeadline(time.Now().Add(a.cfg.UploadTimeout))
+	controller := http.NewResponseController(w)
+	_ = controller.SetReadDeadline(time.Now().Add(a.cfg.UploadTimeout))
+	_ = controller.SetWriteDeadline(time.Now().Add(a.cfg.UploadTimeout + time.Minute))
 	select {
 	case a.uploadQueue <- struct{}{}:
 		defer func() { <-a.uploadQueue }()

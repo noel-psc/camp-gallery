@@ -9,6 +9,9 @@ data/
 *.test
 coverage.out
 
+# Local agent instructions
+/AGENTS.md
+
 # Deployment backups and recovery state
 backups/
 .camp-update.lock

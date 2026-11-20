@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
+	"net"
 	"net/url"
 	"os"
 	"strconv"
@@ -25,6 +26,9 @@ type Config struct {
 	MinFreeBytes                                           int64
 	UploadTimeout                                          time.Duration
 	UploadBytesPerSecond, DownloadBytesPerSecond           int64
+	TrustedProxies                                         []*net.IPNet
+	RequireHTTPS, AllowInsecureHTTP                        bool
+	HSTSMaxAge                                             int64
 }
 
 func loadDotEnv(path string) error {
@@ -82,6 +86,44 @@ func envInt(key string, fallback, low, high int64) (int64, error) {
 	return value, nil
 }
 
+func envBool(key string, fallback bool) (bool, error) {
+	raw := strings.TrimSpace(os.Getenv(key))
+	if raw == "" {
+		return fallback, nil
+	}
+	switch strings.ToLower(raw) {
+	case "1", "true", "yes", "on":
+		return true, nil
+	case "0", "false", "no", "off":
+		return false, nil
+	}
+	return false, fmt.Errorf("%s 必须为 1/0、true/false、yes/no 或 on/off", key)
+}
+
+func parseTrustedProxies(raw string) ([]*net.IPNet, error) {
+	var networks []*net.IPNet
+	for _, item := range strings.Split(raw, ",") {
+		item = strings.TrimSpace(item)
+		if item == "" {
+			continue
+		}
+		if _, network, err := net.ParseCIDR(item); err == nil {
+			networks = append(networks, network)
+			continue
+		}
+		ip := net.ParseIP(item)
+		if ip == nil {
+			return nil, fmt.Errorf("TRUSTED_PROXIES 中的 %q 不是有效 IP 或 CIDR", item)
+		}
+		bits := 128
+		if v4 := ip.To4(); v4 != nil {
+			ip, bits = v4, 32
+		}
+		networks = append(networks, &net.IPNet{IP: ip, Mask: net.CIDRMask(bits, bits)})
+	}
+	return networks, nil
+}
+
 func loadConfig() (Config, error) {
 	if err := loadDotEnv(".env"); err != nil {
 		return Config{}, err
@@ -93,10 +135,30 @@ func loadConfig() (Config, error) {
 	if c.SecretKey == "" {
 		c.SecretKey = randomID() + randomID()
 	}
+	allowInsecure, err := envBool("ALLOW_INSECURE_HTTP", false)
+	if err != nil {
+		return c, err
+	}
+	c.AllowInsecureHTTP = allowInsecure
+	proxies, err := parseTrustedProxies(os.Getenv("TRUSTED_PROXIES"))
+	if err != nil {
+		return c, err
+	}
+	c.TrustedProxies = proxies
 	base, err := url.Parse(c.PublicBaseURL)
 	if err != nil || (base.Scheme != "http" && base.Scheme != "https") || base.Host == "" || base.User != nil || base.Path != "" || base.RawQuery != "" || base.Fragment != "" {
-		return c, fmt.Errorf("PUBLIC_BASE_URL 必须是完整的网站源地址，例如 http://noel-psc.cn:8000")
+		return c, fmt.Errorf("PUBLIC_BASE_URL 必须是完整的网站源地址，例如 https://noel-psc.cn")
 	}
+	// Backward compatible: HTTP is allowed unless the operator opts into a
+	// trusted TLS proxy (https + TRUSTED_PROXIES) and does not force it off.
+	if base.Scheme == "https" && len(c.TrustedProxies) > 0 && !c.AllowInsecureHTTP {
+		c.RequireHTTPS = true
+	}
+	hsts, err := envInt("HSTS_MAX_AGE", 0, 0, 63072000)
+	if err != nil {
+		return c, err
+	}
+	c.HSTSMaxAge = hsts
 	if _, err := time.Parse(time.RFC3339, c.DefaultDeadline); err != nil {
 		return c, fmt.Errorf("UPLOAD_DEADLINE 必须是带时区的 ISO 8601 时间")
 	}

@@ -45,6 +45,13 @@
 - 标签和贺卡中同一学生使用相同二维码。分别生成 A4 打印 PDF，6 位学生均在一页内，已查看渲染图检查截断、二维码和边距。
 - 无未捕获 JavaScript 异常、无 CSP 阻止记录。
 
+## 2026-11-19 安全加固
+
+- `go vet ./...`、`go test ./...`、`go test -race -short ./...` 通过；新增 `security_test.go` 覆盖旧 HTTP 配置兼容、HTTPS 代理可选启用、HTTPS 强制跳转/拒绝、HSTS、Secure cookie、可信代理客户端 IP 与 `X-Forwarded-Proto`，以及登录限流按客户端 IP。
+- `python3 -m unittest tests.test_deploy` 8 项通过，原有更新、备份、回滚和并发锁行为保持不变。
+- `node --test tests/test_upload.js` 15 项通过。
+- `docker-compose.yml` 由 `podman-compose config`（含 `--profile tls` 和 build overlay）解析通过；未在真实 Docker 和公网证书环境执行。
+
 ## 适用范围
 
 该压测使用本机回环网络、2 MiB 测试图片和开发机磁盘。CPU 配额及内存上限与目标主机留余量的配置一致，CPU 型号、磁盘性能、网络链路与真实 ECS 不同。不能据此保证 81 人从校园网络上传大视频的耗时，或承诺所有网络情况下均无超时。

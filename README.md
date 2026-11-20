@@ -21,6 +21,7 @@ cp .env.example .env
 chmod 600 .env
 # 编辑 .env，填写 ADMIN_PASSWORD 和 SECRET_KEY。
 # 本机测试可将 PUBLIC_BASE_URL 改为 http://127.0.0.1:8000。
+# 默认 LISTEN_ADDR=:8000；局域网测试把 PUBLIC_BASE_URL 改为本机 IP 即可，流量不加密。
 ./run.sh
 ```
 
@@ -35,24 +36,43 @@ go build -o camp .
 
 ## 容器部署
 
-首次部署在 `.env` 填写固定密钥、密码、网站地址：
+现有部署的 `.env` 和 `docker-compose.yml` 可以直接沿用：默认仍是 HTTP 8000，旧二维码继续有效，更新后不需要改配置。
 
 ```dotenv
 PUBLIC_BASE_URL=http://noel-psc.cn:8000
 PORT=8000
 ```
 
-本地构建并运行：
+构建并运行：
 
 ```bash
 docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
 ```
 
+HTTP 是明文传输；要修这一项必须配 TLS 反向代理（Caddy 或已有 nginx）。启用后可只改 `.env` 并加 `--profile tls`：
+
+```dotenv
+PUBLIC_BASE_URL=https://noel-psc.cn
+SITE_ADDRESS=noel-psc.cn
+# 可选：填 Caddy 容器 IP/CIDR 才启用应用层强制跳转和真实客户端 IP
+# TRUSTED_PROXIES=
+# 不需要兼容旧二维码时设 127.0.0.1；需要 8000 跳转时保持 0.0.0.0
+BIND_ADDR=127.0.0.1
+```
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.build.yml --profile tls up -d --build
+```
+
+`TRUSTED_PROXIES` 只有在 `PUBLIC_BASE_URL=https` 且确实存在该代理时才生效；否则程序仍按 HTTP 兼容模式运行。Caddy 需要域名解析到本机并放通 TCP 80/443；不填 `TRUSTED_PROXIES` 时 Caddy 仍会终止 TLS，但应用层不额外做 HTTPS 跳转/真实 IP 解析。已有 nginx 时不用 tls profile，把 `TRUSTED_PROXIES` 改为 camp 侧看到的代理地址（宿主机 nginx + Compose 常见 `172.28.0.1/32`，裸机 `127.0.0.1/32`），并保留 `Host`、设置 `X-Forwarded-Proto` 和 `X-Forwarded-For`。
+
+`HSTS_MAX_AGE` 默认 `0`（不发送 HSTS）。开启后浏览器会把 `http://域名:8000/...` 升级为 `https://域名:8000/...`，而 8000 是明文 HTTP，旧二维码会握手失败；确认旧二维码退役或 8000 也提供 TLS 后再设为 `31536000`。
+
 镜像采用多阶段构建，运行时为静态 Go 二进制，UID/GID 为 `1000:1000`。Compose 默认只读根文件系统、可写 `/data` 卷，限制为 1.5 CPU、768 MiB 内存，给 2 核 2 GB 主机上的系统留出空间，并设置 Go 运行时内存软上限 `GOMEMLIMIT=512MiB`。实际峰值应结合文件大小、网络与部署压测观察。默认服务名 `camp`、容器内端口 `8000` 和数据卷键 `camp-data` 保持一致。
 
-**已有 Python 站点请先按 [迁移与部署说明](docs/MIGRATION.md) 备份，再切换镜像。** 保持服务器的部署目录、Compose 项目名、数据卷和 `PUBLIC_BASE_URL` 不变，已有纸质二维码才能继续使用。请勿执行 `docker compose down -v`。
+**已有 Python 站点请先按 [迁移与部署说明](docs/MIGRATION.md) 备份，再切换镜像。** 保持服务器的部署目录、Compose 项目名和数据卷不变。现有 `.env` 可直接沿用，默认 HTTP 8000 和旧二维码继续有效，`update.sh` 不需要改配置。要启用 HTTPS 时再单独配置反向代理。请勿执行 `docker compose down -v`。
 
-当前地址通过 HTTP 的 8000 端口访问，需要云安全组及系统防火墙放通 TCP 8000。生产环境可在前面配置 HTTPS 反向代理；代理请求大小、读写超时也要允许视频上传。
+生产入口默认是 HTTP 8000，云安全组和防火墙放通 TCP 8000。启用 HTTPS 时再放通 80/443；旧二维码需要 8000 时可继续保留。反代请求大小、读写超时也要允许视频上传（nginx 可设 `client_max_body_size 210m;`、`proxy_read_timeout 2h;`）。
 
 ## 一条命令发布与更新
 
@@ -77,7 +97,7 @@ cd /opt/camp-gallery
 sudo bash ./update.sh
 ```
 
-可指定某次已发布版本：`sudo bash ./update.sh v2.1.0-go`。服务器需安装 Docker Compose、Python 3 和 `flock`，并通过 `sudo docker login` 登录仓库。脚本先拉取镜像，成功后暂停服务、完整备份 `/data`，再更新容器并等待健康检查。密码、密钥、网站地址和持久化数据沿用原部署配置。默认健康检查最多等待 120 秒，可通过 `UPDATE_TIMEOUT_SECONDS` 调整。
+可指定某次已发布版本：`sudo bash ./update.sh v2.1.0-go`。服务器需安装 Docker Compose、Python 3 和 `flock`，并通过 `sudo docker login` 登录仓库。脚本先拉取镜像，成功后暂停服务、完整备份 `/data`，再更新容器并等待健康检查。密码、密钥、网站地址和持久化数据沿用原部署配置，现有 HTTP 配置不需要改动。默认健康检查最多等待 120 秒，可通过 `UPDATE_TIMEOUT_SECONDS` 调整。`caddy` 属于 `tls` profile，`update.sh` 只重建 `camp`，不会停止或重建代理。
 
 备份位于部署目录 `backups/update-时间戳/`，包含数据库、作品、原配置和容器信息。备份失败会尝试重启原容器；更新失败会把备份恢复到新数据卷并启动旧镜像，同时保留失败版本的数据卷供核对。恢复配置通过 `.env` 的 `COMPOSE_FILE` 持续生效。备份可能包含密码和私人作品，请妥善保存；完整备份会占用额外磁盘空间，脚本不会自动删除备份或数据卷。
 
@@ -95,8 +115,13 @@ sudo bash ./update.sh
 | --- | --- |
 | `ADMIN_PASSWORD` | 必填，管理员密码 |
 | `SECRET_KEY` | 正式部署必填，建议 `openssl rand -hex 32` 生成 |
-| `PUBLIC_BASE_URL` | 本地默认为 `http://127.0.0.1:8000`；印刷二维码使用此地址 |
-| `LISTEN_ADDR` | `:8000`；容器中保持默认以匹配端口和健康检查 |
+| `PUBLIC_BASE_URL` | 默认可用 `http://noel-psc.cn:8000`；启用 HTTPS 时改为 `https://...` 并配置 `TRUSTED_PROXIES`；印刷二维码使用此地址 |
+| `TRUSTED_PROXIES` | 可选，反向代理 IP/CIDR（逗号分隔）；只有来自这些地址的 `X-Forwarded-Proto` 和 `X-Forwarded-For` 被信任 |
+| `ALLOW_INSECURE_HTTP` | `0`；设为 `1` 可强制关闭 HTTPS 跳转（仅测试/回退用） |
+| `HSTS_MAX_AGE` | `0`；确认旧 8000 端口二维码退役后再设 `31536000`，否则旧二维码会被浏览器升级到 `https://域名:8000` 而失败 |
+| `BIND_ADDR` | `0.0.0.0`；Compose 发布 `camp` 8000 的宿主地址；只让反代访问时设 `127.0.0.1` |
+| `SITE_ADDRESS` | 可选，仅 `tls` profile 使用；Caddy 的域名，例如 `noel-psc.cn` |
+| `LISTEN_ADDR` | `:8000`；容器镜像默认匹配端口和健康检查；本机测试可保持默认 |
 | `DATA_DIR` | 本地 `data`，容器 `/data` |
 | `ACTIVITY_TITLE` | `心纹研学营`，仅初始化默认活动时使用 |
 | `UPLOAD_DEADLINE` | `2026-11-19T23:59:59+08:00`，仅初始化默认活动时使用 |

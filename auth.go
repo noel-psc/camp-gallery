@@ -29,8 +29,67 @@ func (a *App) verify(kind, value string) (string, bool) {
 	_, wanted, _ := strings.Cut(expected, ".")
 	return payload, hmac.Equal([]byte(signature), []byte(wanted))
 }
-func (a *App) cookie(w http.ResponseWriter, name, value string, age int) {
-	http.SetCookie(w, &http.Cookie{Name: name, Value: value, Path: "/", HttpOnly: true, SameSite: http.SameSiteLaxMode, Secure: strings.HasPrefix(a.cfg.PublicBaseURL, "https://"), MaxAge: age})
+func (a *App) cookie(w http.ResponseWriter, r *http.Request, name, value string, age int) {
+	http.SetCookie(w, &http.Cookie{Name: name, Value: value, Path: "/", HttpOnly: true, SameSite: http.SameSiteLaxMode, Secure: strings.HasPrefix(a.cfg.PublicBaseURL, "https://") || a.secureRequest(r), MaxAge: age})
+}
+func (a *App) isTrustedProxy(host string) bool {
+	ip := net.ParseIP(host)
+	if ip == nil {
+		return false
+	}
+	for _, network := range a.cfg.TrustedProxies {
+		if network.Contains(ip) {
+			return true
+		}
+	}
+	return false
+}
+func (a *App) clientIP(r *http.Request) string {
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		host = r.RemoteAddr
+	}
+	if !a.isTrustedProxy(host) {
+		return host
+	}
+	var forwarded []string
+	for _, value := range r.Header.Values("X-Forwarded-For") {
+		forwarded = append(forwarded, strings.Split(value, ",")...)
+	}
+	for i := len(forwarded) - 1; i >= 0; i-- {
+		candidate := strings.TrimSpace(forwarded[i])
+		if candidate == "" {
+			continue
+		}
+		ip := net.ParseIP(candidate)
+		if ip == nil {
+			if host, _, splitErr := net.SplitHostPort(candidate); splitErr == nil {
+				ip = net.ParseIP(host)
+			}
+		}
+		if ip == nil || a.isTrustedProxy(ip.String()) {
+			continue
+		}
+		return ip.String()
+	}
+	return host
+}
+func (a *App) secureRequest(r *http.Request) bool {
+	if r.TLS != nil {
+		return true
+	}
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		host = r.RemoteAddr
+	}
+	if !a.isTrustedProxy(host) {
+		return false
+	}
+	proto := r.Header.Get("X-Forwarded-Proto")
+	if i := strings.IndexByte(proto, ','); i >= 0 {
+		proto = proto[:i]
+	}
+	return strings.EqualFold(strings.TrimSpace(proto), "https")
 }
 func (a *App) csrfToken(w http.ResponseWriter, r *http.Request) string {
 	if c, err := r.Cookie("camp_csrf"); err == nil {
@@ -46,7 +105,7 @@ func (a *App) csrfToken(w http.ResponseWriter, r *http.Request) string {
 	}
 	token := randomID()
 	payload := token + "_" + strconv.FormatInt(a.now().Add(24*time.Hour).Unix(), 10)
-	a.cookie(w, "camp_csrf", a.sign("csrf", payload), 24*3600)
+	a.cookie(w, r, "camp_csrf", a.sign("csrf", payload), 24*3600)
 	return token
 }
 func (a *App) validCSRF(r *http.Request, token string) bool {
@@ -111,6 +170,7 @@ func (a *App) adminOnly(next http.HandlerFunc) http.HandlerFunc {
 }
 func (a *App) parseForm(w http.ResponseWriter, r *http.Request) bool {
 	r.Body = http.MaxBytesReader(w, r.Body, 256<<10)
+	_ = http.NewResponseController(w).SetReadDeadline(time.Now().Add(30 * time.Second))
 	if err := r.ParseForm(); err != nil {
 		a.fail(w, r, 400, "表单内容过大或格式不正确")
 		return false
@@ -133,10 +193,7 @@ func (a *App) login(w http.ResponseWriter, r *http.Request) {
 	if !a.parseForm(w, r) {
 		return
 	}
-	ip, _, err := net.SplitHostPort(r.RemoteAddr)
-	if err != nil {
-		ip = r.RemoteAddr
-	}
+	ip := a.clientIP(r)
 	a.loginMu.Lock()
 	attempt := a.attempts[ip]
 	now := a.now()
@@ -159,9 +216,16 @@ func (a *App) login(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 		}
-		if len(a.attempts) < 1024 {
-			a.attempts[ip] = attempt
+		if _, exists := a.attempts[ip]; !exists && len(a.attempts) >= 1024 {
+			oldestKey, oldest := "", time.Time{}
+			for key, v := range a.attempts {
+				if oldestKey == "" || v.Until.Before(oldest) {
+					oldestKey, oldest = key, v.Until
+				}
+			}
+			delete(a.attempts, oldestKey)
 		}
+		a.attempts[ip] = attempt
 		a.loginMu.Unlock()
 		a.render(w, r, "login", Page{Error: "密码不正确，请检查后重试"}, 401)
 		return
@@ -169,13 +233,13 @@ func (a *App) login(w http.ResponseWriter, r *http.Request) {
 	delete(a.attempts, ip)
 	a.loginMu.Unlock()
 	payload := fmt.Sprintf("%d|%s|%s", now.Add(12*time.Hour).Unix(), randomID(), hex.EncodeToString(expected[:]))
-	a.cookie(w, "camp_admin", a.sign("admin", base64.RawURLEncoding.EncodeToString([]byte(payload))), 12*3600)
+	a.cookie(w, r, "camp_admin", a.sign("admin", base64.RawURLEncoding.EncodeToString([]byte(payload))), 12*3600)
 	http.Redirect(w, r, "/admin", 303)
 }
 func (a *App) logout(w http.ResponseWriter, r *http.Request) {
 	if !a.parseForm(w, r) {
 		return
 	}
-	a.cookie(w, "camp_admin", "", -1)
+	a.cookie(w, r, "camp_admin", "", -1)
 	http.Redirect(w, r, "/admin/login", 303)
 }

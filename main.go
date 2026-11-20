@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 )
@@ -37,7 +38,10 @@ func main() {
 		os.Exit(1)
 	}
 	defer app.Close()
-	server := &http.Server{Addr: cfg.Addr, Handler: app, ReadHeaderTimeout: 10 * time.Second, ReadTimeout: cfg.UploadTimeout + 30*time.Second, IdleTimeout: 60 * time.Second, MaxHeaderBytes: 32 << 10}
+	if strings.HasPrefix(cfg.PublicBaseURL, "http://") {
+		logger.Warn("PUBLIC_BASE_URL uses HTTP; traffic is not encrypted", "public_base_url", cfg.PublicBaseURL)
+	}
+	server := &http.Server{Addr: cfg.Addr, Handler: app, ReadHeaderTimeout: 10 * time.Second, ReadTimeout: 60 * time.Second, WriteTimeout: 60 * time.Second, IdleTimeout: 60 * time.Second, MaxHeaderBytes: 32 << 10}
 	stopping, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	shutdownDone := make(chan struct{})
@@ -51,7 +55,7 @@ func main() {
 			server.Close()
 		}
 	}()
-	logger.Info("SWEET camp started", "version", version, "listen", cfg.Addr, "upload_slots", cfg.MaxConcurrentUploads, "queue_capacity", cfg.MaxQueuedUploads, "upload_mbps", cfg.UploadBytesPerSecond*8/1000000, "download_mbps", cfg.DownloadBytesPerSecond*8/1000000)
+	logger.Info("SWEET camp started", "version", version, "listen", cfg.Addr, "require_https", cfg.RequireHTTPS, "upload_slots", cfg.MaxConcurrentUploads, "queue_capacity", cfg.MaxQueuedUploads, "upload_mbps", cfg.UploadBytesPerSecond*8/1000000, "download_mbps", cfg.DownloadBytesPerSecond*8/1000000)
 	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		logger.Error("server stopped", "error", err)
 		fmt.Fprintln(os.Stderr, err)

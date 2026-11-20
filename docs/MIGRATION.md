@@ -19,7 +19,7 @@ podman login "$ACR_REGISTRY"
 
 脚本支持 Docker buildx 或 Podman，默认目标架构 `linux/amd64`。如果已在本机验证镜像，可设置 `SOURCE_IMAGE=localhost/camp-gallery:v2.0.0-go` 后执行脚本，复用它来推送。镜像是否发布，以命令成功结果为准。
 
-将本版本 `docker-compose.yml` 复制到服务器原来的 `~/camp-gallery/`。服务器 `.env` 保留现有 `SECRET_KEY`、密码和 `PUBLIC_BASE_URL=http://noel-psc.cn:8000`，不要用示例文件覆盖它。保持原 Compose 项目名和部署目录。
+将本版本 `docker-compose.yml` 复制到服务器原来的 `~/camp-gallery/`。服务器 `.env` 保留现有 `SECRET_KEY`、密码和 `PUBLIC_BASE_URL=http://noel-psc.cn:8000`，不要用示例文件覆盖它；默认 HTTP 8000 和旧二维码继续有效，不需要改配置。要启用 HTTPS 时再单独配置反向代理。保持原 Compose 项目名和部署目录。
 
 ## 2. 切换前完整备份
 
@@ -74,6 +74,8 @@ docker compose ps
 docker compose logs --tail=100 camp
 curl -fsS http://127.0.0.1:8000/healthz
 ```
+
+如需 HTTPS，可改用 Caddy（`--profile tls`，设置 `PUBLIC_BASE_URL=https://...`、`SITE_ADDRESS`；`TRUSTED_PROXIES` 可选，填 Caddy 容器 IP/CIDR 才启用应用层强制跳转和真实客户端 IP）或已有 nginx；旧二维码要保留 8000 时设 `BIND_ADDR=0.0.0.0`，否则可设 `127.0.0.1`。HSTS 默认关闭。
 
 原卷由 UID 1000 写入，本版本延续同一 UID。若之前使用自定义宿主目录挂载，需要确认该目录可由 `1000:1000` 读写。避免同时启动两个程序进程访问同一个数据目录。
 

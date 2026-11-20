@@ -13,11 +13,14 @@ services:
     cpus: "1.5"
     pids_limit: 128
     ports:
-      - "${PORT:-8000}:8000"
+      - "${BIND_ADDR:-0.0.0.0}:${PORT:-8000}:8000"
     environment:
       SECRET_KEY: ${SECRET_KEY:?请设置 SECRET_KEY}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:?请设置 ADMIN_PASSWORD}
       PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:?请设置 PUBLIC_BASE_URL}
+      ALLOW_INSECURE_HTTP: ${ALLOW_INSECURE_HTTP:-0}
+      TRUSTED_PROXIES: ${TRUSTED_PROXIES:-}
+      HSTS_MAX_AGE: ${HSTS_MAX_AGE:-0}
       UPLOAD_DEADLINE: ${UPLOAD_DEADLINE:-2026-11-19T23:59:59+08:00}
       MAX_UPLOAD_MB: ${MAX_UPLOAD_MB:-200}
       ACTIVITY_TITLE: ${ACTIVITY_TITLE:-心纹研学营}
@@ -30,5 +33,27 @@ services:
       GOMEMLIMIT: ${GOMEMLIMIT:-512MiB}
     volumes:
       - camp-data:/data
+  caddy:
+    profiles: ["tls"]
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on:
+      - camp
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      SITE_ADDRESS: ${SITE_ADDRESS:-}
+    command:
+      - reverse-proxy
+      - --from
+      - ${SITE_ADDRESS}
+      - --to
+      - camp:8000
+    volumes:
+      - caddy-data:/data
+      - caddy-config:/config
 volumes:
   camp-data:
+  caddy-data:
+  caddy-config:

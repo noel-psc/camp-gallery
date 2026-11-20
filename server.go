@@ -160,6 +160,20 @@ func (a *App) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			a.fail(w, r, 500, "服务暂时不可用，请稍后重试")
 		}
 	}()
+	if a.cfg.RequireHTTPS {
+		if a.secureRequest(r) {
+			if a.cfg.HSTSMaxAge > 0 {
+				w.Header().Set("Strict-Transport-Security", fmt.Sprintf("max-age=%d", a.cfg.HSTSMaxAge))
+			}
+		} else if r.URL.Path != "/healthz" {
+			if r.Method == http.MethodGet || r.Method == http.MethodHead {
+				http.Redirect(w, r, a.cfg.PublicBaseURL+r.URL.RequestURI(), http.StatusPermanentRedirect)
+			} else {
+				a.fail(w, r, http.StatusBadRequest, "请通过 HTTPS 访问")
+			}
+			return
+		}
+	}
 	a.mux.ServeHTTP(w, r)
 }
 func (a *App) render(w http.ResponseWriter, r *http.Request, name string, page Page, code int) {
